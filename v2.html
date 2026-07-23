@@ -1,1 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Polyphase Arrange / Restore</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            padding: 16px;
+            max-width: 700px;
+            margin: 0 auto;
+        }
+        .card {
+            background: #252540;
+            border-radius: 14px;
+            padding: 18px;
+            margin-bottom: 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+        }
+        h2 { margin-top: 0; font-size: 18px; color: #aab; }
+        label { font-weight: bold; display: block; margin: 10px 0 4px; font-size: 14px; }
+        input[type="file"] {
+            background: #353555;
+            padding: 10px;
+            border-radius: 8px;
+            width: 100%;
+            box-sizing: border-box;
+            color: #eee;
+            border: none;
+        }
+        input[type="number"] {
+            background: #353555;
+            border: 1px solid #555;
+            color: #eee;
+            padding: 10px;
+            border-radius: 8px;
+            width: 80px;
+            font-size: 18px;
+            font-weight: bold;
+            text-align: center;
+        }
+        .param-row {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-top: 6px;
+        }
+        .param-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 14px;
+        }
+        .btn {
+            flex: 1;
+            min-width: 90px;
+            background: #4a4a7a;
+            border: none;
+            color: white;
+            padding: 14px 0;
+            border-radius: 30px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+            text-align: center;
+        }
+        .btn:active { transform: scale(0.95); opacity: 0.8; }
+        .btn-primary { background: #5c6cf0; }
+        .btn-success { background: #3d9e6d; }
+        .btn-warning { background: #b88a3d; }
+        canvas {
+            width: 100%;
+            height: auto;
+            border-radius: 10px;
+            margin-top: 10px;
+            background: #111;
+            border: 1px solid #444;
+            image-rendering: pixelated;
+        }
+        .info {
+            background: #1a1a2a;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #aaa;
+            margin: 8px 0 0;
+            word-break: break-all;
+        }
+        #status {
+            color: #8f8;
+            min-height: 22px;
+            margin-top: 6px;
+            font-size: 14px;
+        }
+        .badge {
+            background: #3a3a5a;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
 
+<div class="card">
+    <h2>1. Load Image</h2>
+    <input type="file" id="fileInput" accept="image/*">
+    <div class="info" id="fileInfo">No file selected</div>
+</div>
+
+<div class="card">
+    <h2>2. Parameters</h2>
+    <div class="param-row">
+        <div class="param-item">
+            <label style="margin:0;">Grid N:</label>
+            <input type="number" id="nInput" value="4" min="2" max="200">
+        </div>
+        <div class="param-item">
+            <label style="margin:0;">Sub M:</label>
+            <input type="number" id="mInput" value="3" min="2" max="200">
+        </div>
+        <div class="badge" id="totalBadge">K = 12</div>
+    </div>
+    <div class="info" style="font-size:12px;">Image will be cropped to make width and height divisible by (N * M).</div>
+</div>
+
+<div class="card">
+    <h2>3. Operations</h2>
+    <div class="row">
+        <button class="btn btn-primary" id="btnArrange">Arrange</button>
+        <button class="btn btn-success" id="btnRestore">Restore</button>
+    </div>
+    <div id="status">Load an image to start.</div>
+</div>
+
+<div class="card">
+    <h2>4. Preview</h2>
+    <canvas id="canvasDisplay"></canvas>
+    <div style="display:flex; gap:10px; margin-top:10px;">
+        <button class="btn btn-warning" id="btnDownload" style="flex:1;">Save PNG</button>
+    </div>
+    <div class="info" id="sizeLabel">-</div>
+</div>
+
+<script>
+    (function() {
+        // DOM refs
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const nInput = document.getElementById('nInput');
+        const mInput = document.getElementById('mInput');
+        const totalBadge = document.getElementById('totalBadge');
+        const btnArrange = document.getElementById('btnArrange');
+        const btnRestore = document.getElementById('btnRestore');
+        const btnDownload = document.getElementById('btnDownload');
+        const canvas = document.getElementById('canvasDisplay');
+        const ctx = canvas.getContext('2d');
+        const status = document.getElementById('status');
+        const sizeLabel = document.getElementById('sizeLabel');
+
+        // State
+        let originalImageData = null;      // cropped original (ImageData)
+        let originalWidth = 0;
+        let originalHeight = 0;
+        let currentImageData = null;       // currently displayed
+        let currentMode = 'original';      // 'original' | 'arranged' | 'restored' (仅用于显示)
+
+        function setStatus(msg, isError = false) {
+            status.textContent = msg;
+            status.style.color = isError ? '#f99' : '#8f8';
+        }
+
+        function updateBadge() {
+            const n = parseInt(nInput.value) || 2;
+            const m = parseInt(mInput.value) || 2;
+            const k = n * m;
+            totalBadge.textContent = 'K = ' + k;
+        }
+
+        // Load image and crop to multiple of (N*M)
+        function loadImageData(file, N, M) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const K = N * M;
+                        let w = img.width, h = img.height;
+                        const newW = w - (w % K);
+                        const newH = h - (h % K);
+                        if (newW === 0 || newH === 0) {
+                            reject(new Error('Image too small for given K'));
+                            return;
+                        }
+                        const offscreen = document.createElement('canvas');
+                        offscreen.width = newW;
+                        offscreen.height = newH;
+                        const offCtx = offscreen.getContext('2d');
+  
