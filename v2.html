@@ -108,6 +108,36 @@
             border-radius: 12px;
             font-size: 13px;
         }
+        .suggestion-box {
+            margin-top: 8px;
+            font-size: 12px;
+            color: #aab;
+        }
+        .suggestion-tag {
+            display: inline-block;
+            background: #353570;
+            color: #ccf;
+            padding: 3px 10px;
+            border-radius: 12px;
+            margin: 2px 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background 0.15s;
+        }
+        .suggestion-tag:hover {
+            background: #4a4a9a;
+        }
+        .suggestion-tag.best {
+            background: #2d6b4e;
+            color: #bfb;
+            font-weight: bold;
+        }
+        .suggestion-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            align-items: center;
+        }
     </style>
 </head>
 <body>
@@ -131,7 +161,8 @@
         </div>
         <div class="badge" id="totalBadge">K = 12</div>
     </div>
-    <div class="info" style="font-size:12px;">Image will be cropped to make width and height divisible by (N * M).</div>
+    <div class="info" style="font-size:12px;" id="cropInfo">Image will be cropped to make width and height divisible by N*M.</div>
+    <div class="suggestion-box" id="suggestionBox" style="display:none;"></div>
 </div>
 
 <div class="card">
@@ -139,6 +170,7 @@
     <div class="row">
         <button class="btn btn-primary" id="btnArrange">Arrange</button>
         <button class="btn btn-success" id="btnRestore">Restore</button>
+        <button class="btn btn-warning" id="btnReset" style="flex:0.5;">Show Original</button>
     </div>
     <div id="status">Load an image to start.</div>
 </div>
@@ -154,7 +186,6 @@
 
 <script>
     (function() {
-        // DOM refs
         const fileInput = document.getElementById('fileInput');
         const fileInfo = document.getElementById('fileInfo');
         const nInput = document.getElementById('nInput');
@@ -162,48 +193,340 @@
         const totalBadge = document.getElementById('totalBadge');
         const btnArrange = document.getElementById('btnArrange');
         const btnRestore = document.getElementById('btnRestore');
+        const btnReset = document.getElementById('btnReset');
         const btnDownload = document.getElementById('btnDownload');
         const canvas = document.getElementById('canvasDisplay');
         const ctx = canvas.getContext('2d');
         const status = document.getElementById('status');
         const sizeLabel = document.getElementById('sizeLabel');
+        const suggestionBox = document.getElementById('suggestionBox');
 
-        // State
+        let rawImage = null;               // full-size original Image (never cropped)
+        let rawW = 0, rawH = 0;           // raw image dimensions
         let originalImageData = null;      // cropped original (ImageData)
         let originalWidth = 0;
         let originalHeight = 0;
         let currentImageData = null;       // currently displayed
-        let currentMode = 'original';      // 'original' | 'arranged' | 'restored' (仅用于显示)
+        let currentMode = 'original';
 
-        function setStatus(msg, isError = false) {
+        function setStatus(msg, isError) {
             status.textContent = msg;
-            status.style.color = isError ? '#f99' : '#8f8';
+            status.style.color = isError ? '#f88' : '#8f8';
         }
 
+        function getN() { return Math.max(2, parseInt(nInput.value) || 2); }
+        function getM() { return Math.max(2, parseInt(mInput.value) || 2); }
+
         function updateBadge() {
-            const n = parseInt(nInput.value) || 2;
-            const m = parseInt(mInput.value) || 2;
-            const k = n * m;
+            const k = getN() * getM();
             totalBadge.textContent = 'K = ' + k;
         }
 
-        // Load image and crop to multiple of (N*M)
-        function loadImageData(file, N, M) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    const img = new Image();
-                    img.onload = () => {
-                        const K = N * M;
-                        let w = img.width, h = img.height;
-                        const newW = w - (w % K);
-                        const newH = h - (h % K);
-                        if (newW === 0 || newH === 0) {
-                            reject(new Error('Image too small for given K'));
-                            return;
+        // Crop the raw full-size image to the current N, M parameters.
+        // This is called on image load AND whenever N or M changes.
+        function reCrop() {
+            if (!rawImage) return;
+            const N = getN(), M = getM(), K = N * M;
+            const w = rawW, h = rawH;
+            const newW = w - (w % K);
+            const newH = h - (h % K);
+            if (newW === 0 || newH === 0) {
+                setStatus('Image too small for K=' + K + ' (' + w + 'x' + h + '). Adjust N or M.', true);
+                return;
+            }
+            const off = document.createElement('canvas');
+            off.width = newW;
+            off.height = newH;
+            const oc = off.getContext('2d');
+            oc.drawImage(rawImage, 0, 0, newW, newH, 0, 0, newW, newH);
+            originalImageData = oc.getImageData(0, 0, newW, newH);
+            originalWidth = newW;
+            originalHeight = newH;
+            displayOriginal();
+            updateSuggestions();
+            const lossPct = (100 * (1 - (newW * newH) / (w * h))).toFixed(1);
+            setStatus('Cropped to ' + newW + 'x' + newH + ' (K=' + K + ', loss ' + lossPct + '%)');
+            const cropInfo = document.getElementById('cropInfo');
+            cropInfo.textContent = 'Original: ' + w + 'x' + h + ' -> cropped to ' + newW + 'x' + newH + ' (divisible by ' + K + '). Area loss: ' + lossPct + '%.';
+        }
+
+        function displayOriginal() {
+            if (originalImageData) {
+                updateCanvas(originalImageData, '(cropped original)');
+                currentMode = 'original';
+            }
+        }
+
+        function updateCanvas(imageData, label) {
+            if (!imageData) return;
+            canvas.width = imageData.width;
+            canvas.height = imageData.height;
+            ctx.putImageData(imageData, 0, 0);
+            sizeLabel.textContent = imageData.width + ' x ' + imageData.height + '  ' + (label || '');
+            currentImageData = imageData;
+        }
+
+        // Suggest optimal values for the OTHER parameter to minimize cropping loss.
+        // This suggests M when user is editing N, and N when user is editing M.
+        function computeSuggestions(fixedParam, fixedValue, maxCandidate) {
+            // fixedParam: 'N' or 'M'
+            // fixedValue: the fixed parameter value
+            // maxCandidate: max value to try for the free parameter
+            const w = rawW, h = rawH;
+            if (w === 0 || h === 0) return [];
+            const candidates = [];
+            for (let v = 2; v <= maxCandidate; v++) {
+                let K;
+                if (fixedParam === 'N') {
+                    K = fixedValue * v;
+                } else {
+                    K = v * fixedValue;
+                }
+                const cw = w - (w % K);
+                const ch = h - (h % K);
+                if (cw === 0 || ch === 0) continue;
+                const loss = 1 - (cw * ch) / (w * h);
+                candidates.push({ value: v, loss: loss, K: K, cw: cw, ch: ch });
+            }
+            candidates.sort((a, b) => a.loss - b.loss);
+            return candidates.slice(0, 6);
+        }
+
+        function updateSuggestions() {
+            if (!rawImage) {
+                suggestionBox.style.display = 'none';
+                return;
+            }
+            const N = getN(), M = getM();
+            const maxTry = 100;
+
+            // Compute M suggestions given current N
+            const mSuggestions = computeSuggestions('N', N, maxTry);
+            // Compute N suggestions given current M
+            const nSuggestions = computeSuggestions('M', M, maxTry);
+
+            let html = '';
+
+            if (nSuggestions.length > 0) {
+                html += '<div style="margin-bottom:4px;">Suggested N for M=' + M + ' (minimal area loss): ';
+                html += '<span class="suggestion-row">';
+                for (let i = 0; i < nSuggestions.length; i++) {
+                    const s = nSuggestions[i];
+                    const lossPct = (s.loss * 100).toFixed(1);
+                    const cls = (i === 0) ? 'suggestion-tag best' : 'suggestion-tag';
+                    html += '<span class="' + cls + '" data-set="N" data-val="' + s.value + '" title="K=' + s.K + ', ' + s.cw + 'x' + s.ch + ', loss ' + lossPct + '%">N=' + s.value + ' (' + lossPct + '%)</span>';
+                }
+                html += '</span></div>';
+            }
+
+            if (mSuggestions.length > 0) {
+                html += '<div style="margin-bottom:4px;">Suggested M for N=' + N + ' (minimal area loss): ';
+                html += '<span class="suggestion-row">';
+                for (let i = 0; i < mSuggestions.length; i++) {
+                    const s = mSuggestions[i];
+                    const lossPct = (s.loss * 100).toFixed(1);
+                    const cls = (i === 0) ? 'suggestion-tag best' : 'suggestion-tag';
+                    html += '<span class="' + cls + '" data-set="M" data-val="' + s.value + '" title="K=' + s.K + ', ' + s.cw + 'x' + s.ch + ', loss ' + lossPct + '%">M=' + s.value + ' (' + lossPct + '%)</span>';
+                }
+                html += '</span></div>';
+            }
+
+            if (html) {
+                suggestionBox.innerHTML = html;
+                suggestionBox.style.display = 'block';
+                // attach click handlers
+                suggestionBox.querySelectorAll('.suggestion-tag').forEach(function(tag) {
+                    tag.addEventListener('click', function() {
+                        const setParam = this.getAttribute('data-set');
+                        const val = parseInt(this.getAttribute('data-val'));
+                        if (setParam === 'N') {
+                            nInput.value = val;
+                        } else {
+                            mInput.value = val;
                         }
-                        const offscreen = document.createElement('canvas');
-                        offscreen.width = newW;
-                        offscreen.height = newH;
-                        const offCtx = offscreen.getContext('2d');
-  
+                        updateBadge();
+                        reCrop();
+                    });
+                });
+            } else {
+                suggestionBox.style.display = 'none';
+            }
+        }
+
+        // Load image from file, keep full-size raw image.
+        function loadImageFile(file) {
+            return new Promise(function(resolve, reject) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const img = new Image();
+                    img.onload = function() { resolve(img); };
+                    img.onerror = function() { reject(new Error('Image decode failed')); };
+                    img.src = e.target.result;
+                };
+                reader.onerror = function() { reject(new Error('File read failed')); };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // Polyphase forward (Arrange)
+        function arrangePolyphase(srcData, W, H, N, M) {
+            const K = N * M;
+            if (W % K !== 0 || H % K !== 0) throw new Error('Image size not divisible by K');
+            const blockW = W / K, blockH = H / K;
+            const outData = new ImageData(W, H);
+            const src = srcData.data, dst = outData.data;
+            for (let i = 0; i < M; i++) {
+                for (let j = 0; j < M; j++) {
+                    for (let gy = 0; gy < N; gy++) {
+                        for (let gx = 0; gx < N; gx++) {
+                            const srcX = gx * M * blockW + j * blockW;
+                            const srcY = gy * M * blockH + i * blockH;
+                            const dstX = (j * N + gx) * blockW;
+                            const dstY = (i * N + gy) * blockH;
+                            for (let dy = 0; dy < blockH; dy++) {
+                                for (let dx = 0; dx < blockW; dx++) {
+                                    const si = ((srcY + dy) * W + (srcX + dx)) * 4;
+                                    const di = ((dstY + dy) * W + (dstX + dx)) * 4;
+                                    dst[di] = src[si];
+                                    dst[di+1] = src[si+1];
+                                    dst[di+2] = src[si+2];
+                                    dst[di+3] = src[si+3];
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return outData;
+        }
+
+        // Polyphase inverse (Restore)
+        function restorePolyphase(srcData, W, H, N, M) {
+            const K = N * M;
+            if (W % K !== 0 || H % K !== 0) throw new Error('Image size not divisible by K');
+            const blockW = W / K, blockH = H / K;
+            const outData = new ImageData(W, H);
+            const src = srcData.data, dst = outData.data;
+            for (let i = 0; i < M; i++) {
+                for (let j = 0; j < M; j++) {
+                    for (let gy = 0; gy < N; gy++) {
+                        for (let gx = 0; gx < N; gx++) {
+                            const srcX = (j * N + gx) * blockW;
+                            const srcY = (i * N + gy) * blockH;
+                            const dstX = gx * M * blockW + j * blockW;
+                            const dstY = gy * M * blockH + i * blockH;
+                            for (let dy = 0; dy < blockH; dy++) {
+                                for (let dx = 0; dx < blockW; dx++) {
+                                    const si = ((srcY + dy) * W + (srcX + dx)) * 4;
+                                    const di = ((dstY + dy) * W + (dstX + dx)) * 4;
+                                    dst[di] = src[si];
+                                    dst[di+1] = src[si+1];
+                                    dst[di+2] = src[si+2];
+                                    dst[di+3] = src[si+3];
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return outData;
+        }
+
+        // --- Event Listeners ---
+
+        nInput.addEventListener('input', function() {
+            updateBadge();
+            if (rawImage) reCrop();
+        });
+        mInput.addEventListener('input', function() {
+            updateBadge();
+            if (rawImage) reCrop();
+        });
+
+        fileInput.addEventListener('change', async function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            fileInfo.textContent = file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+            setStatus('Loading...');
+            try {
+                rawImage = await loadImageFile(file);
+                rawW = rawImage.width;
+                rawH = rawImage.height;
+                reCrop();
+            } catch (err) {
+                setStatus('Error: ' + err.message, true);
+            }
+        });
+
+        btnArrange.addEventListener('click', function() {
+            if (!originalImageData) {
+                setStatus('Please load an image first.', true);
+                return;
+            }
+            const N = getN(), M = getM(), K = N * M;
+            if (originalWidth % K !== 0 || originalHeight % K !== 0) {
+                setStatus('Image size not divisible by K. This should not happen - try reloading.', true);
+                return;
+            }
+            try {
+                const arranged = arrangePolyphase(originalImageData, originalWidth, originalHeight, N, M);
+                updateCanvas(arranged, '(arranged N=' + N + ' M=' + M + ')');
+                currentMode = 'arranged';
+                setStatus('Arranged. ' + (M * M) + ' sub-images tiled.');
+            } catch (err) {
+                setStatus('Arrange error: ' + err.message, true);
+            }
+        });
+
+        btnRestore.addEventListener('click', function() {
+            if (!currentImageData) {
+                setStatus('No image on canvas.', true);
+                return;
+            }
+            const N = getN(), M = getM(), K = N * M;
+            const W = currentImageData.width, H = currentImageData.height;
+            if (W % K !== 0 || H % K !== 0) {
+                setStatus('Canvas size not divisible by K. Adjust parameters or reload image.', true);
+                return;
+            }
+            try {
+                const restored = restorePolyphase(currentImageData, W, H, N, M);
+                updateCanvas(restored, '(restored)');
+                currentMode = 'restored';
+                setStatus('Restored (inverse permutation).');
+            } catch (err) {
+                setStatus('Restore error: ' + err.message, true);
+            }
+        });
+
+        btnReset.addEventListener('click', function() {
+            displayOriginal();
+            setStatus('Showing cropped original.');
+        });
+
+        btnDownload.addEventListener('click', function() {
+            if (!currentImageData) {
+                setStatus('Nothing to save.', true);
+                return;
+            }
+            const tmp = document.createElement('canvas');
+            tmp.width = currentImageData.width;
+            tmp.height = currentImageData.height;
+            const tc = tmp.getContext('2d');
+            tc.putImageData(currentImageData, 0, 0);
+            const a = document.createElement('a');
+            const N = getN(), M = getM();
+            a.download = 'polyphase_' + currentMode + '_N' + N + '_M' + M + '.png';
+            a.href = tmp.toDataURL('image/png');
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setStatus('Saved: ' + a.download);
+        });
+
+        updateBadge();
+        setStatus('Load an image to start. You can adjust N and M at any time.');
+    })();
+</script>
+</body>
+</html>
