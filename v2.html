@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -5,11 +6,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Polyphase Arrange / Restore</title>
     <style>
+        * { box-sizing: border-box; }
         body {
             font-family: system-ui, -apple-system, sans-serif;
             background: #1a1a2e;
             color: #eee;
-            padding: 16px;
+            padding: 12px;
             max-width: 700px;
             margin: 0 auto;
         }
@@ -17,37 +19,62 @@
             background: #252540;
             border-radius: 14px;
             padding: 18px;
-            margin-bottom: 16px;
+            margin-bottom: 14px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.4);
         }
-        h2 { margin-top: 0; font-size: 18px; color: #aab; }
-        label { font-weight: bold; display: block; margin: 10px 0 4px; font-size: 14px; }
+        h2 {
+            margin: 0 0 12px 0;
+            font-size: 17px;
+            color: #aab;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .step-num {
+            background: #5c6cf0;
+            color: #fff;
+            width: 24px; height: 24px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+        label {
+            font-weight: bold;
+            font-size: 13px;
+            color: #bbb;
+            display: block;
+            margin-bottom: 2px;
+        }
         input[type="file"] {
             background: #353555;
             padding: 10px;
             border-radius: 8px;
             width: 100%;
-            box-sizing: border-box;
             color: #eee;
             border: none;
+            font-size: 14px;
         }
         input[type="number"] {
             background: #353555;
             border: 1px solid #555;
             color: #eee;
-            padding: 10px;
+            padding: 8px 4px;
             border-radius: 8px;
-            width: 80px;
-            font-size: 18px;
+            width: 70px;
+            font-size: 17px;
             font-weight: bold;
             text-align: center;
         }
         .param-row {
             display: flex;
             align-items: center;
-            gap: 20px;
+            gap: 16px;
             flex-wrap: wrap;
-            margin-top: 6px;
+            margin: 8px 0;
         }
         .param-item {
             display: flex;
@@ -58,7 +85,7 @@
             display: flex;
             gap: 10px;
             flex-wrap: wrap;
-            margin-top: 14px;
+            margin-top: 12px;
         }
         .btn {
             flex: 1;
@@ -66,15 +93,18 @@
             background: #4a4a7a;
             border: none;
             color: white;
-            padding: 14px 0;
+            padding: 13px 0;
             border-radius: 30px;
-            font-size: 16px;
+            font-size: 15px;
             font-weight: bold;
             cursor: pointer;
-            transition: 0.2s;
+            transition: 0.15s;
             text-align: center;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
         }
         .btn:active { transform: scale(0.95); opacity: 0.8; }
+        .btn:disabled { opacity: 0.45; pointer-events: none; }
         .btn-primary { background: #5c6cf0; }
         .btn-success { background: #3d9e6d; }
         .btn-warning { background: #b88a3d; }
@@ -82,7 +112,7 @@
             width: 100%;
             height: auto;
             border-radius: 10px;
-            margin-top: 10px;
+            margin-top: 8px;
             background: #111;
             border: 1px solid #444;
             image-rendering: pixelated;
@@ -91,23 +121,38 @@
             background: #1a1a2a;
             padding: 8px 12px;
             border-radius: 8px;
-            font-size: 13px;
+            font-size: 12px;
             color: #aaa;
             margin: 8px 0 0;
             word-break: break-all;
+            line-height: 1.5;
         }
         #status {
             color: #8f8;
             min-height: 22px;
-            margin-top: 6px;
-            font-size: 14px;
+            margin-top: 4px;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
         .badge {
             background: #3a3a5a;
-            padding: 2px 10px;
-            border-radius: 12px;
-            font-size: 13px;
+            padding: 3px 12px;
+            border-radius: 14px;
+            font-size: 14px;
+            font-weight: bold;
         }
+        .badge-detect {
+            background: #2d5b3e;
+            color: #bfb;
+            padding: 4px 12px;
+            border-radius: 14px;
+            font-size: 12px;
+            font-weight: bold;
+            display: none;
+        }
+        .badge-detect.show { display: inline-block; }
         .suggestion-box {
             margin-top: 8px;
             font-size: 12px;
@@ -123,10 +168,9 @@
             cursor: pointer;
             font-size: 12px;
             transition: background 0.15s;
+            touch-action: manipulation;
         }
-        .suggestion-tag:hover {
-            background: #4a4a9a;
-        }
+        .suggestion-tag:hover { background: #4a4a9a; }
         .suggestion-tag.best {
             background: #2d6b4e;
             color: #bfb;
@@ -138,395 +182,591 @@
             gap: 4px;
             align-items: center;
         }
+        .spinner {
+            display: none;
+            width: 18px; height: 18px;
+            border: 2px solid #555;
+            border-top-color: #8f8;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            flex-shrink: 0;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+            font-size: 13px;
+            color: #bbb;
+        }
+        .toggle-switch {
+            position: relative;
+            width: 44px; height: 24px;
+            flex-shrink: 0;
+        }
+        .toggle-switch input {
+            opacity: 0; width: 0; height: 0;
+        }
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: #555;
+            border-radius: 24px;
+            transition: 0.25s;
+        }
+        .toggle-slider::before {
+            content: "";
+            position: absolute;
+            height: 18px; width: 18px;
+            left: 3px; bottom: 3px;
+            background: white;
+            border-radius: 50%;
+            transition: 0.25s;
+        }
+        .toggle-switch input:checked + .toggle-slider {
+            background: #5c6cf0;
+        }
+        .toggle-switch input:checked + .toggle-slider::before {
+            transform: translateX(20px);
+        }
+        hr.divider {
+            border: none;
+            border-top: 1px solid #3a3a5a;
+            margin: 12px 0 8px;
+        }
+        .detect-info {
+            font-size: 11px;
+            color: #888;
+            margin-top: 2px;
+        }
     </style>
-</head>
+<script src="/_vd/analytics.js" defer></script></head>
 <body>
 
+<!-- Card 1: Load -->
 <div class="card">
-    <h2>1. Load Image</h2>
+    <h2><span class="step-num">1</span> Load Image</h2>
     <input type="file" id="fileInput" accept="image/*">
     <div class="info" id="fileInfo">No file selected</div>
+    <span class="badge-detect" id="detectBadge">🔍 Auto-detected N, M</span>
 </div>
 
+<!-- Card 2: Parameters -->
 <div class="card">
-    <h2>2. Parameters</h2>
+    <h2><span class="step-num">2</span> Parameters</h2>
     <div class="param-row">
         <div class="param-item">
             <label style="margin:0;">Grid N:</label>
-            <input type="number" id="nInput" value="4" min="2" max="200">
+            <input type="number" id="nInput" value="4" min="2" max="999">
         </div>
         <div class="param-item">
             <label style="margin:0;">Sub M:</label>
-            <input type="number" id="mInput" value="3" min="2" max="200">
+            <input type="number" id="mInput" value="3" min="2" max="999">
         </div>
-        <div class="badge" id="totalBadge">K = 12</div>
+        <span class="badge" id="totalBadge">K = 12</span>
     </div>
-    <div class="info" style="font-size:12px;" id="cropInfo">Image will be cropped to make width and height divisible by N*M.</div>
+    <div class="info" style="font-size:11px;" id="cropInfo">
+        Image will be cropped so width &amp; height are divisible by N×M.
+    </div>
     <div class="suggestion-box" id="suggestionBox" style="display:none;"></div>
 </div>
 
+<!-- Card 3: Operations -->
 <div class="card">
-    <h2>3. Operations</h2>
-    <div class="row">
-        <button class="btn btn-primary" id="btnArrange">Arrange</button>
-        <button class="btn btn-success" id="btnRestore">Restore</button>
-        <button class="btn btn-warning" id="btnReset" style="flex:0.5;">Show Original</button>
+    <h2><span class="step-num">3</span> Operations</h2>
+    <div class="toggle-row">
+        <label class="toggle-switch">
+            <input type="checkbox" id="embedToggle" checked>
+            <span class="toggle-slider"></span>
+        </label>
+        <span>Embed N, M in first 2 pixels (lossless for eyes)</span>
     </div>
-    <div id="status">Load an image to start.</div>
+    <div class="row">
+        <button class="btn btn-primary" id="btnArrange">🔀 Arrange</button>
+        <button class="btn btn-success" id="btnRestore">↩ Restore</button>
+        <button class="btn btn-warning" id="btnReset" style="flex:0.6;">⟲ Original</button>
+    </div>
+    <div id="status">Load an image to start.<span class="spinner" id="spinner"></span></div>
 </div>
 
+<!-- Card 4: Preview -->
 <div class="card">
-    <h2>4. Preview</h2>
+    <h2><span class="step-num">4</span> Preview &amp; Save</h2>
     <canvas id="canvasDisplay"></canvas>
     <div style="display:flex; gap:10px; margin-top:10px;">
-        <button class="btn btn-warning" id="btnDownload" style="flex:1;">Save PNG</button>
+        <button class="btn btn-warning" id="btnDownload" style="flex:1;">💾 Save PNG</button>
     </div>
     <div class="info" id="sizeLabel">-</div>
 </div>
 
 <script>
-    (function() {
-        const fileInput = document.getElementById('fileInput');
-        const fileInfo = document.getElementById('fileInfo');
-        const nInput = document.getElementById('nInput');
-        const mInput = document.getElementById('mInput');
-        const totalBadge = document.getElementById('totalBadge');
-        const btnArrange = document.getElementById('btnArrange');
-        const btnRestore = document.getElementById('btnRestore');
-        const btnReset = document.getElementById('btnReset');
-        const btnDownload = document.getElementById('btnDownload');
-        const canvas = document.getElementById('canvasDisplay');
-        const ctx = canvas.getContext('2d');
-        const status = document.getElementById('status');
-        const sizeLabel = document.getElementById('sizeLabel');
-        const suggestionBox = document.getElementById('suggestionBox');
+(function() {
+    // ── DOM refs ──
+    const fileInput    = document.getElementById('fileInput');
+    const fileInfo     = document.getElementById('fileInfo');
+    const nInput       = document.getElementById('nInput');
+    const mInput       = document.getElementById('mInput');
+    const totalBadge   = document.getElementById('totalBadge');
+    const btnArrange   = document.getElementById('btnArrange');
+    const btnRestore   = document.getElementById('btnRestore');
+    const btnReset     = document.getElementById('btnReset');
+    const btnDownload  = document.getElementById('btnDownload');
+    const canvas       = document.getElementById('canvasDisplay');
+    const ctx          = canvas.getContext('2d');
+    const statusEl     = document.getElementById('status');
+    const sizeLabel    = document.getElementById('sizeLabel');
+    const suggestionBox= document.getElementById('suggestionBox');
+    const spinner      = document.getElementById('spinner');
+    const embedToggle  = document.getElementById('embedToggle');
+    const detectBadge  = document.getElementById('detectBadge');
+    const cropInfoEl   = document.getElementById('cropInfo');
 
-        let rawImage = null;               // full-size original Image (never cropped)
-        let rawW = 0, rawH = 0;           // raw image dimensions
-        let originalImageData = null;      // cropped original (ImageData)
-        let originalWidth = 0;
-        let originalHeight = 0;
-        let currentImageData = null;       // currently displayed
-        let currentMode = 'original';
+    // ── State ──
+    let rawImage = null;
+    let rawW = 0, rawH = 0;
+    let originalImageData = null;
+    let originalWidth  = 0;
+    let originalHeight = 0;
+    let currentImageData = null;
+    let currentMode = 'original';
+    let autoDetected = false;  // true if N,M were auto-filled from image pixels
 
-        function setStatus(msg, isError) {
-            status.textContent = msg;
-            status.style.color = isError ? '#f88' : '#8f8';
+    // Reusable off-screen canvas
+    const offCanvas = document.createElement('canvas');
+    const offCtx    = offCanvas.getContext('2d');
+
+    // ── Debounce ──
+    let debounceTimer = null;
+
+    // ── Helpers ──
+    function setStatus(msg, isError) {
+        statusEl.childNodes[0].textContent = msg;
+        statusEl.style.color = isError ? '#f88' : '#8f8';
+    }
+    function showSpinner() { spinner.style.display = 'inline-block'; }
+    function hideSpinner() { spinner.style.display = 'none'; }
+    function getN() { return Math.max(2, parseInt(nInput.value) || 2); }
+    function getM() { return Math.max(2, parseInt(mInput.value) || 2); }
+    function updateBadge() {
+        totalBadge.textContent = 'K = ' + (getN() * getM());
+    }
+
+    // ── Encode / Decode N,M in pixel data ──
+
+    function setOnesDigit(channel, digit) {
+        // digit: 0-9. Set the ones digit of channel to digit.
+        let val = (channel - (channel % 10)) + digit;
+        if (val > 255) val -= 10;
+        if (val < 0)   val += 10;
+        return val;
+    }
+
+    function encodeValue(data, offset, value) {
+        // value: 0-999, encoded as 3 digits in R,G,B ones places
+        const d1 = Math.floor(value / 100);
+        const d2 = Math.floor((value % 100) / 10);
+        const d3 = value % 10;
+        data[offset]     = setOnesDigit(data[offset],     d1);
+        data[offset + 1] = setOnesDigit(data[offset + 1], d2);
+        data[offset + 2] = setOnesDigit(data[offset + 2], d3);
+        // Alpha untouched
+    }
+
+    function decodeValue(data, offset) {
+        const d1 = data[offset] % 10;
+        const d2 = data[offset + 1] % 10;
+        const d3 = data[offset + 2] % 10;
+        return d1 * 100 + d2 * 10 + d3;
+    }
+
+    /**
+     * Try to read N,M from the first two pixels of the image.
+     * Returns {N, M} if values seem valid (N,M >= 2, N*M divides W and H).
+     * Returns null otherwise.
+     */
+    function tryDetectParams(imageData) {
+        const W = imageData.width;
+        const H = imageData.height;
+        if (W < 2 || H < 1) return null;
+
+        const data = imageData.data;
+        const N = decodeValue(data, 0);         // pixel (0,0)
+        const M = decodeValue(data, 4);         // pixel (1,0)
+
+        if (N < 2 || M < 2 || N > 999 || M > 999) return null;
+        const K = N * M;
+        if (W % K !== 0 || H % K !== 0) return null;
+
+        return { N, M };
+    }
+
+    /**
+     * Embed N,M into the first two pixels of the ImageData (mutates in place).
+     */
+    function embedParams(imageData, N, M) {
+        encodeValue(imageData.data, 0, N);  // pixel (0,0) → N
+        encodeValue(imageData.data, 4, M);  // pixel (1,0) → M
+    }
+
+    // ── Canvas helpers ──
+
+    function updateCanvas(imageData, label) {
+        if (!imageData) return;
+        canvas.width  = imageData.width;
+        canvas.height = imageData.height;
+        ctx.putImageData(imageData, 0, 0);
+        sizeLabel.textContent = imageData.width + ' x ' + imageData.height + '  ' + (label || '');
+        currentImageData = imageData;
+    }
+
+    function displayOriginal() {
+        if (originalImageData) {
+            updateCanvas(originalImageData, '(cropped original)');
+            currentMode = 'original';
         }
+    }
 
-        function getN() { return Math.max(2, parseInt(nInput.value) || 2); }
-        function getM() { return Math.max(2, parseInt(mInput.value) || 2); }
+    // ── Crop ──
 
-        function updateBadge() {
-            const k = getN() * getM();
-            totalBadge.textContent = 'K = ' + k;
+    function reCrop() {
+        if (!rawImage) return;
+        const N = getN(), M = getM(), K = N * M;
+        const newW = rawW - (rawW % K);
+        const newH = rawH - (rawH % K);
+        if (newW === 0 || newH === 0) {
+            setStatus('Image too small for K=' + K + ' (' + rawW + 'x' + rawH + ').', true);
+            return;
         }
-
-        // Crop the raw full-size image to the current N, M parameters.
-        // This is called on image load AND whenever N or M changes.
-        function reCrop() {
-            if (!rawImage) return;
-            const N = getN(), M = getM(), K = N * M;
-            const w = rawW, h = rawH;
-            const newW = w - (w % K);
-            const newH = h - (h % K);
-            if (newW === 0 || newH === 0) {
-                setStatus('Image too small for K=' + K + ' (' + w + 'x' + h + '). Adjust N or M.', true);
-                return;
-            }
-            const off = document.createElement('canvas');
-            off.width = newW;
-            off.height = newH;
-            const oc = off.getContext('2d');
-            oc.drawImage(rawImage, 0, 0, newW, newH, 0, 0, newW, newH);
-            originalImageData = oc.getImageData(0, 0, newW, newH);
-            originalWidth = newW;
-            originalHeight = newH;
-            displayOriginal();
-            updateSuggestions();
-            const lossPct = (100 * (1 - (newW * newH) / (w * h))).toFixed(1);
-            setStatus('Cropped to ' + newW + 'x' + newH + ' (K=' + K + ', loss ' + lossPct + '%)');
-            const cropInfo = document.getElementById('cropInfo');
-            cropInfo.textContent = 'Original: ' + w + 'x' + h + ' -> cropped to ' + newW + 'x' + newH + ' (divisible by ' + K + '). Area loss: ' + lossPct + '%.';
+        if (offCanvas.width !== newW || offCanvas.height !== newH) {
+            offCanvas.width  = newW;
+            offCanvas.height = newH;
         }
+        offCtx.clearRect(0, 0, newW, newH);
+        offCtx.drawImage(rawImage, 0, 0, newW, newH, 0, 0, newW, newH);
+        originalImageData = offCtx.getImageData(0, 0, newW, newH);
+        originalWidth  = newW;
+        originalHeight = newH;
+        displayOriginal();
+        updateSuggestions();
 
-        function displayOriginal() {
-            if (originalImageData) {
-                updateCanvas(originalImageData, '(cropped original)');
-                currentMode = 'original';
-            }
+        const lossPct = (100 * (1 - (newW * newH) / (rawW * rawH))).toFixed(1);
+        setStatus('Cropped to ' + newW + 'x' + newH + ' (K=' + K + ', loss ' + lossPct + '%)');
+        cropInfoEl.textContent =
+            'Original: ' + rawW + 'x' + rawH + ' → cropped ' + newW + 'x' + newH +
+            ' (÷' + K + '). Area loss: ' + lossPct + '%.';
+    }
+
+    // ── Suggestions ──
+
+    function computeSuggestions(fixedParam, fixedValue, maxCandidate) {
+        const w = rawW, h = rawH;
+        if (w === 0 || h === 0) return [];
+        const candidates = [];
+        for (let v = 2; v <= maxCandidate; v++) {
+            const K = (fixedParam === 'N') ? fixedValue * v : v * fixedValue;
+            const cw = w - (w % K);
+            const ch = h - (h % K);
+            if (cw === 0 || ch === 0) continue;
+            const loss = 1 - (cw * ch) / (w * h);
+            candidates.push({ value: v, loss, K, cw, ch });
         }
+        candidates.sort((a, b) => a.loss - b.loss);
+        return candidates.slice(0, 6);
+    }
 
-        function updateCanvas(imageData, label) {
-            if (!imageData) return;
-            canvas.width = imageData.width;
-            canvas.height = imageData.height;
-            ctx.putImageData(imageData, 0, 0);
-            sizeLabel.textContent = imageData.width + ' x ' + imageData.height + '  ' + (label || '');
-            currentImageData = imageData;
+    function updateSuggestions() {
+        if (!rawImage) { suggestionBox.style.display = 'none'; return; }
+        const N = getN(), M = getM();
+        const maxTry = 100;
+
+        const mSug = computeSuggestions('N', N, maxTry);
+        const nSug = computeSuggestions('M', M, maxTry);
+
+        let html = '';
+        function renderSug(arr, label, paramName) {
+            if (arr.length === 0) return;
+            html += '<div style="margin-bottom:4px;">' + label + ': ';
+            html += '<span class="suggestion-row">';
+            for (let i = 0; i < arr.length; i++) {
+                const s = arr[i];
+                const cls = (i === 0) ? 'suggestion-tag best' : 'suggestion-tag';
+                html += '<span class="' + cls + '" data-set="' + paramName +
+                    '" data-val="' + s.value +
+                    '" title="K=' + s.K + ', ' + s.cw + 'x' + s.ch +
+                    ', loss ' + (s.loss * 100).toFixed(1) + '%">' +
+                    paramName + '=' + s.value + ' (' + (s.loss * 100).toFixed(1) + '%)</span>';
+            }
+            html += '</span></div>';
         }
+        renderSug(nSug, 'Suggested N for M=' + M, 'N');
+        renderSug(mSug, 'Suggested M for N=' + N, 'M');
 
-        // Suggest optimal values for the OTHER parameter to minimize cropping loss.
-        // This suggests M when user is editing N, and N when user is editing M.
-        function computeSuggestions(fixedParam, fixedValue, maxCandidate) {
-            // fixedParam: 'N' or 'M'
-            // fixedValue: the fixed parameter value
-            // maxCandidate: max value to try for the free parameter
-            const w = rawW, h = rawH;
-            if (w === 0 || h === 0) return [];
-            const candidates = [];
-            for (let v = 2; v <= maxCandidate; v++) {
-                let K;
-                if (fixedParam === 'N') {
-                    K = fixedValue * v;
-                } else {
-                    K = v * fixedValue;
-                }
-                const cw = w - (w % K);
-                const ch = h - (h % K);
-                if (cw === 0 || ch === 0) continue;
-                const loss = 1 - (cw * ch) / (w * h);
-                candidates.push({ value: v, loss: loss, K: K, cw: cw, ch: ch });
-            }
-            candidates.sort((a, b) => a.loss - b.loss);
-            return candidates.slice(0, 6);
-        }
-
-        function updateSuggestions() {
-            if (!rawImage) {
-                suggestionBox.style.display = 'none';
-                return;
-            }
-            const N = getN(), M = getM();
-            const maxTry = 100;
-
-            // Compute M suggestions given current N
-            const mSuggestions = computeSuggestions('N', N, maxTry);
-            // Compute N suggestions given current M
-            const nSuggestions = computeSuggestions('M', M, maxTry);
-
-            let html = '';
-
-            if (nSuggestions.length > 0) {
-                html += '<div style="margin-bottom:4px;">Suggested N for M=' + M + ' (minimal area loss): ';
-                html += '<span class="suggestion-row">';
-                for (let i = 0; i < nSuggestions.length; i++) {
-                    const s = nSuggestions[i];
-                    const lossPct = (s.loss * 100).toFixed(1);
-                    const cls = (i === 0) ? 'suggestion-tag best' : 'suggestion-tag';
-                    html += '<span class="' + cls + '" data-set="N" data-val="' + s.value + '" title="K=' + s.K + ', ' + s.cw + 'x' + s.ch + ', loss ' + lossPct + '%">N=' + s.value + ' (' + lossPct + '%)</span>';
-                }
-                html += '</span></div>';
-            }
-
-            if (mSuggestions.length > 0) {
-                html += '<div style="margin-bottom:4px;">Suggested M for N=' + N + ' (minimal area loss): ';
-                html += '<span class="suggestion-row">';
-                for (let i = 0; i < mSuggestions.length; i++) {
-                    const s = mSuggestions[i];
-                    const lossPct = (s.loss * 100).toFixed(1);
-                    const cls = (i === 0) ? 'suggestion-tag best' : 'suggestion-tag';
-                    html += '<span class="' + cls + '" data-set="M" data-val="' + s.value + '" title="K=' + s.K + ', ' + s.cw + 'x' + s.ch + ', loss ' + lossPct + '%">M=' + s.value + ' (' + lossPct + '%)</span>';
-                }
-                html += '</span></div>';
-            }
-
-            if (html) {
-                suggestionBox.innerHTML = html;
-                suggestionBox.style.display = 'block';
-                // attach click handlers
-                suggestionBox.querySelectorAll('.suggestion-tag').forEach(function(tag) {
-                    tag.addEventListener('click', function() {
-                        const setParam = this.getAttribute('data-set');
-                        const val = parseInt(this.getAttribute('data-val'));
-                        if (setParam === 'N') {
-                            nInput.value = val;
-                        } else {
-                            mInput.value = val;
-                        }
-                        updateBadge();
-                        reCrop();
-                    });
+        if (html) {
+            suggestionBox.innerHTML = html;
+            suggestionBox.style.display = 'block';
+            suggestionBox.querySelectorAll('.suggestion-tag').forEach(function(tag) {
+                tag.addEventListener('click', function() {
+                    const param = this.getAttribute('data-set');
+                    const val = parseInt(this.getAttribute('data-val'));
+                    if (param === 'N') nInput.value = val; else mInput.value = val;
+                    updateBadge();
+                    if (debounceTimer) clearTimeout(debounceTimer);
+                    reCrop();
+                    autoDetected = false;
+                    detectBadge.classList.remove('show');
                 });
-            } else {
-                suggestionBox.style.display = 'none';
-            }
-        }
-
-        // Load image from file, keep full-size raw image.
-        function loadImageFile(file) {
-            return new Promise(function(resolve, reject) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    const img = new Image();
-                    img.onload = function() { resolve(img); };
-                    img.onerror = function() { reject(new Error('Image decode failed')); };
-                    img.src = e.target.result;
-                };
-                reader.onerror = function() { reject(new Error('File read failed')); };
-                reader.readAsDataURL(file);
             });
+        } else {
+            suggestionBox.style.display = 'none';
         }
+    }
 
-        // Polyphase forward (Arrange)
-        function arrangePolyphase(srcData, W, H, N, M) {
-            const K = N * M;
-            if (W % K !== 0 || H % K !== 0) throw new Error('Image size not divisible by K');
-            const blockW = W / K, blockH = H / K;
-            const outData = new ImageData(W, H);
-            const src = srcData.data, dst = outData.data;
-            for (let i = 0; i < M; i++) {
-                for (let j = 0; j < M; j++) {
-                    for (let gy = 0; gy < N; gy++) {
-                        for (let gx = 0; gx < N; gx++) {
-                            const srcX = gx * M * blockW + j * blockW;
-                            const srcY = gy * M * blockH + i * blockH;
-                            const dstX = (j * N + gx) * blockW;
-                            const dstY = (i * N + gy) * blockH;
-                            for (let dy = 0; dy < blockH; dy++) {
-                                for (let dx = 0; dx < blockW; dx++) {
-                                    const si = ((srcY + dy) * W + (srcX + dx)) * 4;
-                                    const di = ((dstY + dy) * W + (dstX + dx)) * 4;
-                                    dst[di] = src[si];
-                                    dst[di+1] = src[si+1];
-                                    dst[di+2] = src[si+2];
-                                    dst[di+3] = src[si+3];
-                                }
-                            }
-                        }
+    // ── Optimized Polyphase ──
+
+    function copyBlock(src, dst, srcX, srcY, dstX, dstY, blockW, blockH, stride) {
+        const rowBytes = blockW * 4;
+        for (let dy = 0; dy < blockH; dy++) {
+            const si = ((srcY + dy) * stride + srcX) * 4;
+            const di = ((dstY + dy) * stride + dstX) * 4;
+            dst.set(src.subarray(si, si + rowBytes), di);
+        }
+    }
+
+    function arrangePolyphase(srcData, W, H, N, M) {
+        const K = N * M;
+        const blockW = W / K, blockH = H / K;
+        const outData = new ImageData(W, H);
+        const src = srcData.data, dst = outData.data;
+
+        for (let i = 0; i < M; i++) {
+            for (let j = 0; j < M; j++) {
+                for (let gy = 0; gy < N; gy++) {
+                    for (let gx = 0; gx < N; gx++) {
+                        const sx = gx * M * blockW + j * blockW;
+                        const sy = gy * M * blockH + i * blockH;
+                        const dx = (j * N + gx) * blockW;
+                        const dy = (i * N + gy) * blockH;
+                        copyBlock(src, dst, sx, sy, dx, dy, blockW, blockH, W);
                     }
                 }
             }
-            return outData;
         }
+        return outData;
+    }
 
-        // Polyphase inverse (Restore)
-        function restorePolyphase(srcData, W, H, N, M) {
-            const K = N * M;
-            if (W % K !== 0 || H % K !== 0) throw new Error('Image size not divisible by K');
-            const blockW = W / K, blockH = H / K;
-            const outData = new ImageData(W, H);
-            const src = srcData.data, dst = outData.data;
-            for (let i = 0; i < M; i++) {
-                for (let j = 0; j < M; j++) {
-                    for (let gy = 0; gy < N; gy++) {
-                        for (let gx = 0; gx < N; gx++) {
-                            const srcX = (j * N + gx) * blockW;
-                            const srcY = (i * N + gy) * blockH;
-                            const dstX = gx * M * blockW + j * blockW;
-                            const dstY = gy * M * blockH + i * blockH;
-                            for (let dy = 0; dy < blockH; dy++) {
-                                for (let dx = 0; dx < blockW; dx++) {
-                                    const si = ((srcY + dy) * W + (srcX + dx)) * 4;
-                                    const di = ((dstY + dy) * W + (dstX + dx)) * 4;
-                                    dst[di] = src[si];
-                                    dst[di+1] = src[si+1];
-                                    dst[di+2] = src[si+2];
-                                    dst[di+3] = src[si+3];
-                                }
-                            }
-                        }
+    function restorePolyphase(srcData, W, H, N, M) {
+        const K = N * M;
+        const blockW = W / K, blockH = H / K;
+        const outData = new ImageData(W, H);
+        const src = srcData.data, dst = outData.data;
+
+        for (let i = 0; i < M; i++) {
+            for (let j = 0; j < M; j++) {
+                for (let gy = 0; gy < N; gy++) {
+                    for (let gx = 0; gx < N; gx++) {
+                        const sx = (j * N + gx) * blockW;
+                        const sy = (i * N + gy) * blockH;
+                        const dx = gx * M * blockW + j * blockW;
+                        const dy = gy * M * blockH + i * blockH;
+                        copyBlock(src, dst, sx, sy, dx, dy, blockW, blockH, W);
                     }
                 }
             }
-            return outData;
         }
+        return outData;
+    }
 
-        // --- Event Listeners ---
+    function runAsync(fn) {
+        return new Promise(function(resolve) {
+            requestAnimationFrame(function() {
+                resolve(fn());
+            });
+        });
+    }
 
-        nInput.addEventListener('input', function() {
+    // ── Image loader ──
+
+    function loadImageFile(file) {
+        return new Promise(function(resolve, reject) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload  = function() { resolve(img); };
+                img.onerror = function() { reject(new Error('Image decode failed')); };
+                img.src = e.target.result;
+            };
+            reader.onerror = function() { reject(new Error('File read failed')); };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // ── Main flow: load image → detect → crop ──
+
+    async function handleFileLoad(file) {
+        fileInfo.textContent = file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+        setStatus('Loading...');
+        showSpinner();
+        try {
+            rawImage = await loadImageFile(file);
+            rawW = rawImage.width;
+            rawH = rawImage.height;
+
+            // Step 1: draw full image to offCanvas to read first pixels for detection
+            offCanvas.width  = rawW;
+            offCanvas.height = rawH;
+            offCtx.clearRect(0, 0, rawW, rawH);
+            offCtx.drawImage(rawImage, 0, 0);
+            const fullImageData = offCtx.getImageData(0, 0, rawW, rawH);
+
+            // Step 2: try to auto-detect N, M from embedded pixels
+            const detected = tryDetectParams(fullImageData);
+            if (detected) {
+                nInput.value = detected.N;
+                mInput.value = detected.M;
+                autoDetected = true;
+                detectBadge.classList.add('show');
+                detectBadge.textContent = '🔍 Detected N=' + detected.N + ', M=' + detected.M + ' from image pixels';
+            } else {
+                autoDetected = false;
+                detectBadge.classList.remove('show');
+            }
+
             updateBadge();
-            if (rawImage) reCrop();
-        });
-        mInput.addEventListener('input', function() {
-            updateBadge();
-            if (rawImage) reCrop();
-        });
+            reCrop();
+            hideSpinner();
+        } catch (err) {
+            hideSpinner();
+            setStatus('Error: ' + err.message, true);
+        }
+    }
 
-        fileInput.addEventListener('change', async function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            fileInfo.textContent = file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
-            setStatus('Loading...');
-            try {
-                rawImage = await loadImageFile(file);
-                rawW = rawImage.width;
-                rawH = rawImage.height;
-                reCrop();
-            } catch (err) {
-                setStatus('Error: ' + err.message, true);
-            }
-        });
+    // ── Event listeners ──
 
-        btnArrange.addEventListener('click', function() {
-            if (!originalImageData) {
-                setStatus('Please load an image first.', true);
-                return;
-            }
-            const N = getN(), M = getM(), K = N * M;
-            if (originalWidth % K !== 0 || originalHeight % K !== 0) {
-                setStatus('Image size not divisible by K. This should not happen - try reloading.', true);
-                return;
-            }
-            try {
-                const arranged = arrangePolyphase(originalImageData, originalWidth, originalHeight, N, M);
-                updateCanvas(arranged, '(arranged N=' + N + ' M=' + M + ')');
-                currentMode = 'arranged';
-                setStatus('Arranged. ' + (M * M) + ' sub-images tiled.');
-            } catch (err) {
-                setStatus('Arrange error: ' + err.message, true);
-            }
-        });
-
-        btnRestore.addEventListener('click', function() {
-            if (!currentImageData) {
-                setStatus('No image on canvas.', true);
-                return;
-            }
-            const N = getN(), M = getM(), K = N * M;
-            const W = currentImageData.width, H = currentImageData.height;
-            if (W % K !== 0 || H % K !== 0) {
-                setStatus('Canvas size not divisible by K. Adjust parameters or reload image.', true);
-                return;
-            }
-            try {
-                const restored = restorePolyphase(currentImageData, W, H, N, M);
-                updateCanvas(restored, '(restored)');
-                currentMode = 'restored';
-                setStatus('Restored (inverse permutation).');
-            } catch (err) {
-                setStatus('Restore error: ' + err.message, true);
-            }
-        });
-
-        btnReset.addEventListener('click', function() {
-            displayOriginal();
-            setStatus('Showing cropped original.');
-        });
-
-        btnDownload.addEventListener('click', function() {
-            if (!currentImageData) {
-                setStatus('Nothing to save.', true);
-                return;
-            }
-            const tmp = document.createElement('canvas');
-            tmp.width = currentImageData.width;
-            tmp.height = currentImageData.height;
-            const tc = tmp.getContext('2d');
-            tc.putImageData(currentImageData, 0, 0);
-            const a = document.createElement('a');
-            const N = getN(), M = getM();
-            a.download = 'polyphase_' + currentMode + '_N' + N + '_M' + M + '.png';
-            a.href = tmp.toDataURL('image/png');
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            setStatus('Saved: ' + a.download);
-        });
-
+    function onParamInput() {
         updateBadge();
-        setStatus('Load an image to start. You can adjust N and M at any time.');
-    })();
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(function() {
+            if (rawImage) {
+                autoDetected = false;
+                detectBadge.classList.remove('show');
+                reCrop();
+            }
+        }, 300);
+    }
+    function onParamChange() {
+        updateBadge();
+        if (debounceTimer) clearTimeout(debounceTimer);
+        if (rawImage) {
+            autoDetected = false;
+            detectBadge.classList.remove('show');
+            reCrop();
+        }
+    }
+
+    nInput.addEventListener('input', onParamInput);
+    mInput.addEventListener('input', onParamInput);
+    nInput.addEventListener('change', onParamChange);
+    mInput.addEventListener('change', onParamChange);
+
+    fileInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        handleFileLoad(file);
+    });
+
+    btnArrange.addEventListener('click', async function() {
+        if (!originalImageData) {
+            setStatus('Please load an image first.', true);
+            return;
+        }
+        const N = getN(), M = getM(), K = N * M;
+        if (originalWidth % K !== 0 || originalHeight % K !== 0) {
+            setStatus('Size not divisible by K. Try reloading.', true);
+            return;
+        }
+        showSpinner();
+        btnArrange.disabled = btnRestore.disabled = true;
+        try {
+            const arranged = await runAsync(function() {
+                return arrangePolyphase(originalImageData, originalWidth, originalHeight, N, M);
+            });
+
+            // Embed N,M if toggle is on
+            if (embedToggle.checked) {
+                embedParams(arranged, N, M);
+            }
+
+            updateCanvas(arranged, '(arranged N=' + N + ' M=' + M +
+                (embedToggle.checked ? ' [params embedded]' : '') + ')');
+            currentMode = 'arranged';
+            setStatus('Arranged. ' + (M * M) + ' sub-images tiled.' +
+                (embedToggle.checked ? ' N,M embedded in pixels.' : ''));
+        } catch (err) {
+            setStatus('Arrange error: ' + err.message, true);
+        } finally {
+            hideSpinner();
+            btnArrange.disabled = btnRestore.disabled = false;
+        }
+    });
+
+    btnRestore.addEventListener('click', async function() {
+        if (!currentImageData) {
+            setStatus('No image on canvas.', true);
+            return;
+        }
+        const N = getN(), M = getM(), K = N * M;
+        const W = currentImageData.width, H = currentImageData.height;
+        if (W % K !== 0 || H % K !== 0) {
+            setStatus('Canvas size not divisible by K=' + K + '. Adjust parameters or reload.', true);
+            return;
+        }
+        showSpinner();
+        btnArrange.disabled = btnRestore.disabled = true;
+        try {
+            const restored = await runAsync(function() {
+                return restorePolyphase(currentImageData, W, H, N, M);
+            });
+            updateCanvas(restored, '(restored N=' + N + ' M=' + M + ')');
+            currentMode = 'restored';
+            setStatus('Restored (inverse permutation).');
+        } catch (err) {
+            setStatus('Restore error: ' + err.message, true);
+        } finally {
+            hideSpinner();
+            btnArrange.disabled = btnRestore.disabled = false;
+        }
+    });
+
+    btnReset.addEventListener('click', function() {
+        displayOriginal();
+        setStatus('Showing cropped original.');
+    });
+
+    btnDownload.addEventListener('click', function() {
+        if (!currentImageData) {
+            setStatus('Nothing to save.', true);
+            return;
+        }
+        offCanvas.width  = currentImageData.width;
+        offCanvas.height = currentImageData.height;
+        offCtx.putImageData(currentImageData, 0, 0);
+        const a = document.createElement('a');
+        const N = getN(), M = getM();
+        a.download = 'polyphase_' + currentMode + '_N' + N + '_M' + M + '.png';
+        a.href = offCanvas.toDataURL('image/png');
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setStatus('Saved: ' + a.download);
+    });
+
+    // Init
+    updateBadge();
+    setStatus('Load an image to start.');
+})();
 </script>
+<div data-vd-widget-root data-vd-slug="td847s9p" data-vd-messages="1" data-vd-branding="1"></div><script src="/_vd/widget.js" defer></script><script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"032a837c7e3c4d90b710926b44166cfc","r":1}' crossorigin="anonymous"></script>
 </body>
 </html>
